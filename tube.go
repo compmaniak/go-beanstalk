@@ -1,7 +1,10 @@
 package beanstalk
 
 import (
+	"bytes"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -10,6 +13,55 @@ import (
 type Tube struct {
 	Conn *Conn
 	Name string
+}
+
+type TubeStats struct {
+	Name                string
+	CurrentJobsUrgent   uint64
+	CurrentJobsReady    uint64
+	CurrentJobsReserved uint64
+	CurrentJobsDelayed  uint64
+	CurrentJobsBuried   uint64
+	TotalJobs           uint64
+	CurrentUsing        uint64
+	CurrentWaiting      uint64
+	CurrentWatching     uint64
+	CmdDelete           uint64
+	CmdPauseTube        uint64
+	Pause               uint64
+	PauseTimeLeft       uint64
+}
+
+const (
+	idxCurrentJobsUrgent int = iota
+	idxCurrentJobsReady
+	idxCurrentJobsReserved
+	idxCurrentJobsDelayed
+	idxCurrentJobsBuried
+	idxTotalJobs
+	idxCurrentUsing
+	idxCurrentWaiting
+	idxCurrentWatching
+	idxCmdDelete
+	idxCmdPauseTube
+	idxPause
+	idxPauseTimeLeft
+)
+
+var statNameToIdx = map[string]int{
+	"current-jobs-urgent":   idxCurrentJobsUrgent,
+	"current-jobs-ready":    idxCurrentJobsReady,
+	"current-jobs-reserved": idxCurrentJobsReserved,
+	"current-jobs-delayed":  idxCurrentJobsDelayed,
+	"current-jobs-buried":   idxCurrentJobsBuried,
+	"total-jobs":            idxTotalJobs,
+	"current-using":         idxCurrentUsing,
+	"current-waiting":       idxCurrentWaiting,
+	"current-watching":      idxCurrentWatching,
+	"cmd-delete":            idxCmdDelete,
+	"cmd-pause-tube":        idxCmdPauseTube,
+	"pause":                 idxPause,
+	"pause-time-left":       idxPauseTimeLeft,
 }
 
 // Put puts a job into tube t with priority pri and TTR ttr, and returns
@@ -93,13 +145,53 @@ func (t *Tube) Kick(bound int) (n int, err error) {
 }
 
 // Stats retrieves statistics about tube t.
-func (t *Tube) Stats() (map[string]string, error) {
+func (t *Tube) Stats() (TubeStats, error) {
 	r, err := t.Conn.cmd(nil, nil, nil, "stats-tube", t.Name)
 	if err != nil {
-		return nil, err
+		return TubeStats{}, err
 	}
 	body, err := t.Conn.readResp(r, true, "OK")
-	return parseDict(body), err
+	if err != nil {
+		return TubeStats{}, err
+	}
+	var stats [13]uint64
+	body = bytes.TrimPrefix(body, yamlHead)
+	for lines := string(body); len(lines) > 0; {
+		eol := strings.Index(lines, "\n")
+		if eol == -1 {
+			return TubeStats{}, unknownRespError(lines)
+		}
+		line := lines[:eol]
+		lines = lines[eol+1:]
+		colon := strings.Index(line, ": ")
+		if colon == -1 {
+			return TubeStats{}, unknownRespError(line)
+		}
+		i, ok := statNameToIdx[line[:colon]]
+		if ok {
+			v, err := strconv.ParseUint(line[colon+2:], 10, 64)
+			if err != nil {
+				return TubeStats{}, err
+			}
+			stats[i] = v
+		}
+	}
+	return TubeStats{
+		Name:                t.Name,
+		CurrentJobsUrgent:   stats[idxCurrentJobsUrgent],
+		CurrentJobsReady:    stats[idxCurrentJobsReady],
+		CurrentJobsReserved: stats[idxCurrentJobsReserved],
+		CurrentJobsDelayed:  stats[idxCurrentJobsDelayed],
+		CurrentJobsBuried:   stats[idxCurrentJobsBuried],
+		TotalJobs:           stats[idxTotalJobs],
+		CurrentUsing:        stats[idxCurrentUsing],
+		CurrentWaiting:      stats[idxCurrentWaiting],
+		CurrentWatching:     stats[idxCurrentWatching],
+		CmdDelete:           stats[idxCmdDelete],
+		CmdPauseTube:        stats[idxCmdPauseTube],
+		Pause:               stats[idxPause],
+		PauseTimeLeft:       stats[idxPauseTimeLeft],
+	}, nil
 }
 
 // Pause pauses new reservations in t for time d.

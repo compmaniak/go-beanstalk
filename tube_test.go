@@ -108,14 +108,41 @@ func TestTubeKick(t *testing.T) {
 }
 
 func TestTubeStats(t *testing.T) {
-	c := NewConn(mock("stats-tube default\r\n", "OK 10\r\n---\na: ok\n\r\n"))
+	c := NewConn(mock("stats-tube default\r\n", "OK 265\r\n---\n"+
+		"name: default\n"+
+		"current-jobs-urgent: 1\n"+
+		"current-jobs-ready: 2\n"+
+		"current-jobs-reserved: 3\n"+
+		"current-jobs-delayed: 4\n"+
+		"current-jobs-buried: 5\n"+
+		"total-jobs: 6\n"+
+		"current-using: 7\n"+
+		"current-waiting: 8\n"+
+		"current-watching: 9\n"+
+		"cmd-delete: 8\n"+
+		"cmd-pause-tube: 7\n"+
+		"pause: 6\n"+
+		"pause-time-left: 5\n\r\n"))
 
-	m, err := c.Tube.Stats()
+	s, err := c.Tube.Stats()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(m) != 1 || m["a"] != "ok" {
-		t.Fatalf("expected %#v, got %#v", map[string]string{"a": "ok"}, m)
+	if s.Name != "default" ||
+		s.CurrentJobsUrgent != 1 ||
+		s.CurrentJobsReady != 2 ||
+		s.CurrentJobsReserved != 3 ||
+		s.CurrentJobsDelayed != 4 ||
+		s.CurrentJobsBuried != 5 ||
+		s.TotalJobs != 6 ||
+		s.CurrentUsing != 7 ||
+		s.CurrentWaiting != 8 ||
+		s.CurrentWatching != 9 ||
+		s.CmdDelete != 8 ||
+		s.CmdPauseTube != 7 ||
+		s.Pause != 6 ||
+		s.PauseTimeLeft != 5 {
+		t.Fatal("got unexpected stats")
 	}
 	if err = c.Close(); err != nil {
 		t.Fatal(err)
