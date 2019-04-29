@@ -28,17 +28,15 @@ func parseList(dat []byte) []string {
 	if dat == nil {
 		return nil
 	}
-	l := []string{}
-	if bytes.HasPrefix(dat, yamlHead) {
-		dat = dat[4:]
+	dat = bytes.TrimPrefix(dat, yamlHead)
+	lines := strings.Split(string(dat), "\n")
+	for i, s := range lines {
+		lines[i] = strings.TrimPrefix(s, "- ")
 	}
-	for _, s := range bytes.Split(dat, nl) {
-		if !bytes.HasPrefix(s, minusSpace) {
-			continue
-		}
-		l = append(l, string(s[2:]))
+	if l := len(lines); l > 0 && len(lines[l-1]) == 0 {
+		lines = lines[:l-1]
 	}
-	return l
+	return lines
 }
 
 func parseSize(s string) (string, int, error) {
