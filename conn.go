@@ -27,6 +27,38 @@ type Conn struct {
 	TubeSet
 }
 
+type JobStats struct {
+	Id       uint64
+	Tube     string
+	State    string
+	Pri      uint64
+	Age      uint64
+	Delay    uint64
+	Ttr      uint64
+	TimeLeft uint64
+	File     uint64
+	Reserves uint64
+	Timeouts uint64
+	Releases uint64
+	Buries   uint64
+	Kicks    uint64
+}
+
+const (
+	idxId int = iota
+	idxPri
+	idxAge
+	idxDelay
+	idxTtr
+	idxTimeLeft
+	idxFile
+	idxReserves
+	idxTimeouts
+	idxReleases
+	idxBuries
+	idxKicks
+)
+
 var (
 	space      = []byte{' '}
 	crnl       = []byte{'\r', '\n'}
@@ -34,6 +66,21 @@ var (
 	nl         = []byte{'\n'}
 	colonSpace = []byte{':', ' '}
 	minusSpace = []byte{'-', ' '}
+
+	jobStatToIdx = map[string]int{
+		"id":        idxId,
+		"pri":       idxPri,
+		"age":       idxAge,
+		"delay":     idxDelay,
+		"ttr":       idxTtr,
+		"time-left": idxTimeLeft,
+		"file":      idxFile,
+		"reserves":  idxReserves,
+		"timeouts":  idxTimeouts,
+		"releases":  idxReleases,
+		"buries":    idxBuries,
+		"kicks":     idxKicks,
+	}
 )
 
 // NewConn returns a new Conn using conn for I/O.
@@ -252,13 +299,43 @@ func (c *Conn) Stats() (map[string]string, error) {
 }
 
 // StatsJob retrieves statistics about the given job.
-func (c *Conn) StatsJob(id uint64) (map[string]string, error) {
+func (c *Conn) StatsJob(id uint64) (JobStats, error) {
 	r, err := c.cmd(nil, nil, nil, "stats-job", id)
 	if err != nil {
-		return nil, err
+		return JobStats{}, err
 	}
 	body, err := c.readResp(r, true, "OK")
-	return parseDict(body), err
+	if err != nil {
+		return JobStats{}, err
+	}
+	var stats [12]uint64
+	var tube, state string
+	err = parseStats(body, jobStatToIdx, stats[:], func(name string, value string) {
+		if name == "tube" {
+			tube = value
+		} else if name == "state" {
+			state = value
+		}
+	})
+	if err != nil {
+		return JobStats{}, err
+	}
+	return JobStats{
+		Id:       stats[idxId],
+		Tube:     tube,
+		State:    state,
+		Pri:      stats[idxPri],
+		Age:      stats[idxAge],
+		Delay:    stats[idxDelay],
+		Ttr:      stats[idxTtr],
+		TimeLeft: stats[idxTimeLeft],
+		File:     stats[idxFile],
+		Reserves: stats[idxReserves],
+		Timeouts: stats[idxTimeouts],
+		Releases: stats[idxReleases],
+		Buries:   stats[idxBuries],
+		Kicks:    stats[idxKicks],
+	}, nil
 }
 
 // ListTubes returns the names of the tubes that currently

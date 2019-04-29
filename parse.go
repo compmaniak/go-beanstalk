@@ -50,3 +50,32 @@ func parseSize(s string) (string, int, error) {
 	}
 	return s[:i], n, nil
 }
+
+type nonNumericHandler func(string, string)
+
+func parseStats(dat []byte, numIdx map[string]int, nums []uint64, h nonNumericHandler) error {
+	dat = bytes.TrimPrefix(dat, yamlHead)
+	for lines := string(dat); len(lines) > 0; {
+		eol := strings.Index(lines, "\n")
+		if eol == -1 {
+			return unknownRespError(lines)
+		}
+		line := lines[:eol]
+		lines = lines[eol+1:]
+		colon := strings.Index(line, ": ")
+		if colon == -1 {
+			return unknownRespError(line)
+		}
+		name, value := line[:colon], line[colon+2:]
+		if i, ok := numIdx[name]; ok {
+			n, err := strconv.ParseUint(value, 10, 64)
+			if err != nil {
+				return err
+			}
+			nums[i] = n
+		} else if h != nil {
+			h(name, value)
+		}
+	}
+	return nil
+}

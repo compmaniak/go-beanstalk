@@ -1,10 +1,7 @@
 package beanstalk
 
 import (
-	"bytes"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -48,7 +45,7 @@ const (
 	idxPauseTimeLeft
 )
 
-var statNameToIdx = map[string]int{
+var tubeStatToIdx = map[string]int{
 	"current-jobs-urgent":   idxCurrentJobsUrgent,
 	"current-jobs-ready":    idxCurrentJobsReady,
 	"current-jobs-reserved": idxCurrentJobsReserved,
@@ -155,26 +152,9 @@ func (t *Tube) Stats() (TubeStats, error) {
 		return TubeStats{}, err
 	}
 	var stats [13]uint64
-	body = bytes.TrimPrefix(body, yamlHead)
-	for lines := string(body); len(lines) > 0; {
-		eol := strings.Index(lines, "\n")
-		if eol == -1 {
-			return TubeStats{}, unknownRespError(lines)
-		}
-		line := lines[:eol]
-		lines = lines[eol+1:]
-		colon := strings.Index(line, ": ")
-		if colon == -1 {
-			return TubeStats{}, unknownRespError(line)
-		}
-		i, ok := statNameToIdx[line[:colon]]
-		if ok {
-			v, err := strconv.ParseUint(line[colon+2:], 10, 64)
-			if err != nil {
-				return TubeStats{}, err
-			}
-			stats[i] = v
-		}
+	err = parseStats(body, tubeStatToIdx, stats[:], nil)
+	if err != nil {
+		return TubeStats{}, err
 	}
 	return TubeStats{
 		Name:                t.Name,

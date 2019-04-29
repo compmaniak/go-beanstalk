@@ -215,14 +215,41 @@ func TestStats(t *testing.T) {
 }
 
 func TestStatsJob(t *testing.T) {
-	c := NewConn(mock("stats-job 1\r\n", "OK 10\r\n---\na: ok\n\r\n"))
+	c := NewConn(mock("stats-job 1\r\n", "OK 148\r\n---\n"+
+		"id: 6\n"+
+		"tube: default\n"+
+		"state: ready\n"+
+		"pri: 7\n"+
+		"age: 357566\n"+
+		"delay: 8\n"+
+		"ttr: 9\n"+
+		"time-left: 8\n"+
+		"file: 7\n"+
+		"reserves: 6\n"+
+		"timeouts: 5\n"+
+		"releases: 4\n"+
+		"buries: 3\n"+
+		"kicks: 2\n\r\n"))
 
-	m, err := c.StatsJob(1)
+	s, err := c.StatsJob(1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(m) != 1 || m["a"] != "ok" {
-		t.Fatalf("expected %#v, got %#v", map[string]string{"a": "ok"}, m)
+	if s.Id != 6 ||
+		s.Tube != "default" ||
+		s.State != "ready" ||
+		s.Pri != 7 ||
+		s.Age != 357566 ||
+		s.Delay != 8 ||
+		s.Ttr != 9 ||
+		s.TimeLeft != 8 ||
+		s.File != 7 ||
+		s.Reserves != 6 ||
+		s.Timeouts != 5 ||
+		s.Releases != 4 ||
+		s.Buries != 3 ||
+		s.Kicks != 2 {
+		t.Fatal("got unexpected stats")
 	}
 	if err = c.Close(); err != nil {
 		t.Fatal(err)
