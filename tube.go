@@ -30,35 +30,36 @@ type TubeStats struct {
 }
 
 const (
-	idxCurrentJobsUrgent int = iota
-	idxCurrentJobsReady
-	idxCurrentJobsReserved
-	idxCurrentJobsDelayed
-	idxCurrentJobsBuried
-	idxTotalJobs
-	idxCurrentUsing
-	idxCurrentWaiting
-	idxCurrentWatching
-	idxCmdDelete
-	idxCmdPauseTube
-	idxPause
-	idxPauseTimeLeft
+	nTubeStatsCurrentJobsUrgent int = iota
+	nTubeStatsCurrentJobsReady
+	nTubeStatsCurrentJobsReserved
+	nTubeStatsCurrentJobsDelayed
+	nTubeStatsCurrentJobsBuried
+	nTubeStatsTotalJobs
+	nTubeStatsCurrentUsing
+	nTubeStatsCurrentWaiting
+	nTubeStatsCurrentWatching
+	nTubeStatsCmdDelete
+	nTubeStatsCmdPauseTube
+	nTubeStatsPause
+	nTubeStatsPauseTimeLeft
+	nTubeStats
 )
 
 var tubeStatToIdx = map[string]int{
-	"current-jobs-urgent":   idxCurrentJobsUrgent,
-	"current-jobs-ready":    idxCurrentJobsReady,
-	"current-jobs-reserved": idxCurrentJobsReserved,
-	"current-jobs-delayed":  idxCurrentJobsDelayed,
-	"current-jobs-buried":   idxCurrentJobsBuried,
-	"total-jobs":            idxTotalJobs,
-	"current-using":         idxCurrentUsing,
-	"current-waiting":       idxCurrentWaiting,
-	"current-watching":      idxCurrentWatching,
-	"cmd-delete":            idxCmdDelete,
-	"cmd-pause-tube":        idxCmdPauseTube,
-	"pause":                 idxPause,
-	"pause-time-left":       idxPauseTimeLeft,
+	"current-jobs-urgent":   nTubeStatsCurrentJobsUrgent,
+	"current-jobs-ready":    nTubeStatsCurrentJobsReady,
+	"current-jobs-reserved": nTubeStatsCurrentJobsReserved,
+	"current-jobs-delayed":  nTubeStatsCurrentJobsDelayed,
+	"current-jobs-buried":   nTubeStatsCurrentJobsBuried,
+	"total-jobs":            nTubeStatsTotalJobs,
+	"current-using":         nTubeStatsCurrentUsing,
+	"current-waiting":       nTubeStatsCurrentWaiting,
+	"current-watching":      nTubeStatsCurrentWatching,
+	"cmd-delete":            nTubeStatsCmdDelete,
+	"cmd-pause-tube":        nTubeStatsCmdPauseTube,
+	"pause":                 nTubeStatsPause,
+	"pause-time-left":       nTubeStatsPauseTimeLeft,
 }
 
 // Put puts a job into tube t with priority pri and TTR ttr, and returns
@@ -151,26 +152,26 @@ func (t *Tube) Stats() (TubeStats, error) {
 	if err != nil {
 		return TubeStats{}, err
 	}
-	var stats [13]uint64
+	var stats [nTubeStats]uint64
 	err = parseStats(body, tubeStatToIdx, stats[:], nil)
 	if err != nil {
 		return TubeStats{}, err
 	}
 	return TubeStats{
 		Name:                t.Name,
-		CurrentJobsUrgent:   stats[idxCurrentJobsUrgent],
-		CurrentJobsReady:    stats[idxCurrentJobsReady],
-		CurrentJobsReserved: stats[idxCurrentJobsReserved],
-		CurrentJobsDelayed:  stats[idxCurrentJobsDelayed],
-		CurrentJobsBuried:   stats[idxCurrentJobsBuried],
-		TotalJobs:           stats[idxTotalJobs],
-		CurrentUsing:        stats[idxCurrentUsing],
-		CurrentWaiting:      stats[idxCurrentWaiting],
-		CurrentWatching:     stats[idxCurrentWatching],
-		CmdDelete:           stats[idxCmdDelete],
-		CmdPauseTube:        stats[idxCmdPauseTube],
-		Pause:               stats[idxPause],
-		PauseTimeLeft:       stats[idxPauseTimeLeft],
+		CurrentJobsUrgent:   stats[nTubeStatsCurrentJobsUrgent],
+		CurrentJobsReady:    stats[nTubeStatsCurrentJobsReady],
+		CurrentJobsReserved: stats[nTubeStatsCurrentJobsReserved],
+		CurrentJobsDelayed:  stats[nTubeStatsCurrentJobsDelayed],
+		CurrentJobsBuried:   stats[nTubeStatsCurrentJobsBuried],
+		TotalJobs:           stats[nTubeStatsTotalJobs],
+		CurrentUsing:        stats[nTubeStatsCurrentUsing],
+		CurrentWaiting:      stats[nTubeStatsCurrentWaiting],
+		CurrentWatching:     stats[nTubeStatsCurrentWatching],
+		CmdDelete:           stats[nTubeStatsCmdDelete],
+		CmdPauseTube:        stats[nTubeStatsCmdPauseTube],
+		Pause:               stats[nTubeStatsPause],
+		PauseTimeLeft:       stats[nTubeStatsPauseTimeLeft],
 	}, nil
 }
 

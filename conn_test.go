@@ -200,14 +200,109 @@ func TestRelease(t *testing.T) {
 }
 
 func TestStats(t *testing.T) {
-	c := NewConn(mock("stats\r\n", "OK 10\r\n---\na: ok\n\r\n"))
+	c := NewConn(mock("stats\r\n", "OK 924\r\n---\n"+
+		"current-jobs-urgent: 2\n"+
+		"current-jobs-ready: 4\n"+
+		"current-jobs-reserved: 1\n"+
+		"current-jobs-delayed: 1\n"+
+		"current-jobs-buried: 1\n"+
+		"cmd-put: 11\n"+
+		"cmd-peek: 1\n"+
+		"cmd-peek-ready: 143\n"+
+		"cmd-peek-delayed: 132\n"+
+		"cmd-peek-buried: 132\n"+
+		"cmd-reserve: 1\n"+
+		"cmd-reserve-with-timeout: 1\n"+
+		"cmd-delete: 7\n"+
+		"cmd-release: 1\n"+
+		"cmd-use: 31\n"+
+		"cmd-watch: 1\n"+
+		"cmd-ignore: 1\n"+
+		"cmd-bury: 1\n"+
+		"cmd-kick: 1\n"+
+		"cmd-touch: 1\n"+
+		"cmd-stats: 51\n"+
+		"cmd-stats-job: 157\n"+
+		"cmd-stats-tube: 7203\n"+
+		"cmd-list-tubes: 2298\n"+
+		"cmd-list-tube-used: 1\n"+
+		"cmd-list-tubes-watched: 1\n"+
+		"cmd-pause-tube: 1\n"+
+		"job-timeouts: 1\n"+
+		"total-jobs: 11\n"+
+		"max-job-size: 65535\n"+
+		"current-tubes: 3\n"+
+		"current-connections: 1\n"+
+		"current-producers: 1\n"+
+		"current-workers: 1\n"+
+		"current-waiting: 1\n"+
+		"total-connections: 3600\n"+
+		"pid: 1\n"+
+		"version: abcd\n"+
+		"rusage-utime: 0.464000\n"+
+		"rusage-stime: 1.332000\n"+
+		"uptime: 1027197\n"+
+		"binlog-oldest-index: 1\n"+
+		"binlog-current-index: 1\n"+
+		"binlog-records-migrated: 1\n"+
+		"binlog-records-written: 1\n"+
+		"binlog-max-size: 10485760\n"+
+		"id: d6643fa880016589\n"+
+		"hostname: 8e21001eb759\n\r\n"))
 
-	m, err := c.Stats()
+	s, err := c.Stats()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(m) != 1 || m["a"] != "ok" {
-		t.Fatalf("expected %#v, got %#v", map[string]string{"a": "ok"}, m)
+	if s.CurrentJobsUrgent != 2 ||
+		s.CurrentJobsReady != 4 ||
+		s.CurrentJobsReserved != 1 ||
+		s.CurrentJobsDelayed != 1 ||
+		s.CurrentJobsBuried != 1 ||
+		s.CmdPut != 11 ||
+		s.CmdPeek != 1 ||
+		s.CmdPeekReady != 143 ||
+		s.CmdPeekDelayed != 132 ||
+		s.CmdPeekBuried != 132 ||
+		s.CmdReserve != 1 ||
+		s.CmdReserveWithTimeout != 1 ||
+		s.CmdDelete != 7 ||
+		s.CmdRelease != 1 ||
+		s.CmdUse != 31 ||
+		s.CmdWatch != 1 ||
+		s.CmdIgnore != 1 ||
+		s.CmdBury != 1 ||
+		s.CmdKick != 1 ||
+		s.CmdTouch != 1 ||
+		s.CmdStats != 51 ||
+		s.CmdStatsJob != 157 ||
+		s.CmdStatsTube != 7203 ||
+		s.CmdListTubes != 2298 ||
+		s.CmdListTubeUsed != 1 ||
+		s.CmdListTubesWatched != 1 ||
+		s.CmdPauseTube != 1 ||
+		s.JobTimeouts != 1 ||
+		s.TotalJobs != 11 ||
+		s.MaxJobSize != 65535 ||
+		s.CurrentTubes != 3 ||
+		s.CurrentConnections != 1 ||
+		s.CurrentProducers != 1 ||
+		s.CurrentWorkers != 1 ||
+		s.CurrentWaiting != 1 ||
+		s.TotalConnections != 3600 ||
+		s.Pid != 1 ||
+		s.Version != "abcd" ||
+		s.RusageUtime != "0.464000" ||
+		s.RusageStime != "1.332000" ||
+		s.Uptime != 1027197 ||
+		s.BinlogOldestIndex != 1 ||
+		s.BinlogCurrentIndex != 1 ||
+		s.BinlogRecordsMigrated != 1 ||
+		s.BinlogRecordsWritten != 1 ||
+		s.BinlogMaxSize != 10485760 ||
+		s.Id != "d6643fa880016589" ||
+		s.Hostname != "8e21001eb759" {
+		t.Fatal("got unexpected stats")
 	}
 	if err = c.Close(); err != nil {
 		t.Fatal(err)

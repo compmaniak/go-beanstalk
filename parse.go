@@ -6,24 +6,6 @@ import (
 	"strings"
 )
 
-func parseDict(dat []byte) map[string]string {
-	if dat == nil {
-		return nil
-	}
-	d := make(map[string]string)
-	if bytes.HasPrefix(dat, yamlHead) {
-		dat = dat[4:]
-	}
-	for _, s := range bytes.Split(dat, nl) {
-		kv := bytes.SplitN(s, colonSpace, 2)
-		if len(kv) != 2 {
-			continue
-		}
-		d[string(kv[0])] = string(kv[1])
-	}
-	return d
-}
-
 func parseList(dat []byte) []string {
 	if dat == nil {
 		return nil

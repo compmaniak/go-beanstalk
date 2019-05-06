@@ -27,6 +27,57 @@ type Conn struct {
 	TubeSet
 }
 
+type Stats struct {
+	CurrentJobsUrgent     uint64
+	CurrentJobsReady      uint64
+	CurrentJobsReserved   uint64
+	CurrentJobsDelayed    uint64
+	CurrentJobsBuried     uint64
+	CmdPut                uint64
+	CmdPeek               uint64
+	CmdPeekReady          uint64
+	CmdPeekDelayed        uint64
+	CmdPeekBuried         uint64
+	CmdReserve            uint64
+	CmdReserveWithTimeout uint64
+	CmdDelete             uint64
+	CmdRelease            uint64
+	CmdUse                uint64
+	CmdWatch              uint64
+	CmdIgnore             uint64
+	CmdBury               uint64
+	CmdKick               uint64
+	CmdTouch              uint64
+	CmdStats              uint64
+	CmdStatsJob           uint64
+	CmdStatsTube          uint64
+	CmdListTubes          uint64
+	CmdListTubeUsed       uint64
+	CmdListTubesWatched   uint64
+	CmdPauseTube          uint64
+	JobTimeouts           uint64
+	TotalJobs             uint64
+	MaxJobSize            uint64
+	CurrentTubes          uint64
+	CurrentConnections    uint64
+	CurrentProducers      uint64
+	CurrentWorkers        uint64
+	CurrentWaiting        uint64
+	TotalConnections      uint64
+	Pid                   uint64
+	Version               string
+	RusageUtime           string
+	RusageStime           string
+	Uptime                uint64
+	BinlogOldestIndex     uint64
+	BinlogCurrentIndex    uint64
+	BinlogRecordsMigrated uint64
+	BinlogRecordsWritten  uint64
+	BinlogMaxSize         uint64
+	Id                    string
+	Hostname              string
+}
+
 type JobStats struct {
 	Id       uint64
 	Tube     string
@@ -45,18 +96,64 @@ type JobStats struct {
 }
 
 const (
-	idxId int = iota
-	idxPri
-	idxAge
-	idxDelay
-	idxTtr
-	idxTimeLeft
-	idxFile
-	idxReserves
-	idxTimeouts
-	idxReleases
-	idxBuries
-	idxKicks
+	nStatsCurrentJobsUrgent int = iota
+	nStatsCurrentJobsReady
+	nStatsCurrentJobsReserved
+	nStatsCurrentJobsDelayed
+	nStatsCurrentJobsBuried
+	nStatsCmdPut
+	nStatsCmdPeek
+	nStatsCmdPeekReady
+	nStatsCmdPeekDelayed
+	nStatsCmdPeekBuried
+	nStatsCmdReserve
+	nStatsCmdReserveWithTimeout
+	nStatsCmdDelete
+	nStatsCmdRelease
+	nStatsCmdUse
+	nStatsCmdWatch
+	nStatsCmdIgnore
+	nStatsCmdBury
+	nStatsCmdKick
+	nStatsCmdTouch
+	nStatsCmdStats
+	nStatsCmdStatsJob
+	nStatsCmdStatsTube
+	nStatsCmdListTubes
+	nStatsCmdListTubeUsed
+	nStatsCmdListTubesWatched
+	nStatsCmdPauseTube
+	nStatsJobTimeouts
+	nStatsTotalJobs
+	nStatsMaxJobSize
+	nStatsCurrentTubes
+	nStatsCurrentConnections
+	nStatsCurrentProducers
+	nStatsCurrentWorkers
+	nStatsCurrentWaiting
+	nStatsTotalConnections
+	nStatsPid
+	nStatsUptime
+	nStatsBinlogOldestIndex
+	nStatsBinlogCurrentIndex
+	nStatsBinlogRecordsMigrated
+	nStatsBinlogRecordsWritten
+	nStatsBinlogMaxSize
+	nStats
+
+	nJobStatsId int = iota
+	nJobStatsPri
+	nJobStatsAge
+	nJobStatsDelay
+	nJobStatsTtr
+	nJobStatsTimeLeft
+	nJobStatsFile
+	nJobStatsReserves
+	nJobStatsTimeouts
+	nJobStatsReleases
+	nJobStatsBuries
+	nJobStatsKicks
+	nJobStats
 )
 
 var (
@@ -67,19 +164,65 @@ var (
 	colonSpace = []byte{':', ' '}
 	minusSpace = []byte{'-', ' '}
 
+	statToIdx = map[string]int{
+		"current-jobs-urgent":      nStatsCurrentJobsUrgent,
+		"current-jobs-ready":       nStatsCurrentJobsReady,
+		"current-jobs-reserved":    nStatsCurrentJobsReserved,
+		"current-jobs-delayed":     nStatsCurrentJobsDelayed,
+		"current-jobs-buried":      nStatsCurrentJobsBuried,
+		"cmd-put":                  nStatsCmdPut,
+		"cmd-peek":                 nStatsCmdPeek,
+		"cmd-peek-ready":           nStatsCmdPeekReady,
+		"cmd-peek-delayed":         nStatsCmdPeekDelayed,
+		"cmd-peek-buried":          nStatsCmdPeekBuried,
+		"cmd-reserve":              nStatsCmdReserve,
+		"cmd-reserve-with-timeout": nStatsCmdReserveWithTimeout,
+		"cmd-delete":               nStatsCmdDelete,
+		"cmd-release":              nStatsCmdRelease,
+		"cmd-use":                  nStatsCmdUse,
+		"cmd-watch":                nStatsCmdWatch,
+		"cmd-ignore":               nStatsCmdIgnore,
+		"cmd-bury":                 nStatsCmdBury,
+		"cmd-kick":                 nStatsCmdKick,
+		"cmd-touch":                nStatsCmdTouch,
+		"cmd-stats":                nStatsCmdStats,
+		"cmd-stats-job":            nStatsCmdStatsJob,
+		"cmd-stats-tube":           nStatsCmdStatsTube,
+		"cmd-list-tubes":           nStatsCmdListTubes,
+		"cmd-list-tube-used":       nStatsCmdListTubeUsed,
+		"cmd-list-tubes-watched":   nStatsCmdListTubesWatched,
+		"cmd-pause-tube":           nStatsCmdPauseTube,
+		"job-timeouts":             nStatsJobTimeouts,
+		"total-jobs":               nStatsTotalJobs,
+		"max-job-size":             nStatsMaxJobSize,
+		"current-tubes":            nStatsCurrentTubes,
+		"current-connections":      nStatsCurrentConnections,
+		"current-producers":        nStatsCurrentProducers,
+		"current-workers":          nStatsCurrentWorkers,
+		"current-waiting":          nStatsCurrentWaiting,
+		"total-connections":        nStatsTotalConnections,
+		"pid":                      nStatsPid,
+		"uptime":                   nStatsUptime,
+		"binlog-oldest-index":      nStatsBinlogOldestIndex,
+		"binlog-current-index":     nStatsBinlogCurrentIndex,
+		"binlog-records-migrated":  nStatsBinlogRecordsMigrated,
+		"binlog-records-written":   nStatsBinlogRecordsWritten,
+		"binlog-max-size":          nStatsBinlogMaxSize,
+	}
+
 	jobStatToIdx = map[string]int{
-		"id":        idxId,
-		"pri":       idxPri,
-		"age":       idxAge,
-		"delay":     idxDelay,
-		"ttr":       idxTtr,
-		"time-left": idxTimeLeft,
-		"file":      idxFile,
-		"reserves":  idxReserves,
-		"timeouts":  idxTimeouts,
-		"releases":  idxReleases,
-		"buries":    idxBuries,
-		"kicks":     idxKicks,
+		"id":        nJobStatsId,
+		"pri":       nJobStatsPri,
+		"age":       nJobStatsAge,
+		"delay":     nJobStatsDelay,
+		"ttr":       nJobStatsTtr,
+		"time-left": nJobStatsTimeLeft,
+		"file":      nJobStatsFile,
+		"reserves":  nJobStatsReserves,
+		"timeouts":  nJobStatsTimeouts,
+		"releases":  nJobStatsReleases,
+		"buries":    nJobStatsBuries,
+		"kicks":     nJobStatsKicks,
 	}
 )
 
@@ -288,14 +431,78 @@ func (c *Conn) Peek(id uint64) (body []byte, err error) {
 	return c.readResp(r, true, "FOUND %d", &id)
 }
 
-// Stats retrieves global statistics from the server.
-func (c *Conn) Stats() (map[string]string, error) {
+func (c *Conn) Stats() (Stats, error) {
 	r, err := c.cmd(nil, nil, nil, "stats")
 	if err != nil {
-		return nil, err
+		return Stats{}, err
 	}
 	body, err := c.readResp(r, true, "OK")
-	return parseDict(body), err
+	if err != nil {
+		return Stats{}, err
+	}
+	var res Stats
+	var stats [nStats]uint64
+	err = parseStats(body, statToIdx, stats[:], func(name string, value string) {
+		switch name {
+		case "version":
+			res.Version = value
+		case "rusage-utime":
+			res.RusageUtime = value
+		case "rusage-stime":
+			res.RusageStime = value
+		case "id":
+			res.Id = value
+		case "hostname":
+			res.Hostname = value
+		}
+	})
+	if err != nil {
+		return Stats{}, err
+	}
+	res.CurrentJobsUrgent = stats[nStatsCurrentJobsUrgent]
+	res.CurrentJobsReady = stats[nStatsCurrentJobsReady]
+	res.CurrentJobsReserved = stats[nStatsCurrentJobsReserved]
+	res.CurrentJobsDelayed = stats[nStatsCurrentJobsDelayed]
+	res.CurrentJobsBuried = stats[nStatsCurrentJobsBuried]
+	res.CmdPut = stats[nStatsCmdPut]
+	res.CmdPeek = stats[nStatsCmdPeek]
+	res.CmdPeekReady = stats[nStatsCmdPeekReady]
+	res.CmdPeekDelayed = stats[nStatsCmdPeekDelayed]
+	res.CmdPeekBuried = stats[nStatsCmdPeekBuried]
+	res.CmdReserve = stats[nStatsCmdReserve]
+	res.CmdReserveWithTimeout = stats[nStatsCmdReserveWithTimeout]
+	res.CmdDelete = stats[nStatsCmdDelete]
+	res.CmdRelease = stats[nStatsCmdRelease]
+	res.CmdUse = stats[nStatsCmdUse]
+	res.CmdWatch = stats[nStatsCmdWatch]
+	res.CmdIgnore = stats[nStatsCmdIgnore]
+	res.CmdBury = stats[nStatsCmdBury]
+	res.CmdKick = stats[nStatsCmdKick]
+	res.CmdTouch = stats[nStatsCmdTouch]
+	res.CmdStats = stats[nStatsCmdStats]
+	res.CmdStatsJob = stats[nStatsCmdStatsJob]
+	res.CmdStatsTube = stats[nStatsCmdStatsTube]
+	res.CmdListTubes = stats[nStatsCmdListTubes]
+	res.CmdListTubeUsed = stats[nStatsCmdListTubeUsed]
+	res.CmdListTubesWatched = stats[nStatsCmdListTubesWatched]
+	res.CmdPauseTube = stats[nStatsCmdPauseTube]
+	res.JobTimeouts = stats[nStatsJobTimeouts]
+	res.TotalJobs = stats[nStatsTotalJobs]
+	res.MaxJobSize = stats[nStatsMaxJobSize]
+	res.CurrentTubes = stats[nStatsCurrentTubes]
+	res.CurrentConnections = stats[nStatsCurrentConnections]
+	res.CurrentProducers = stats[nStatsCurrentProducers]
+	res.CurrentWorkers = stats[nStatsCurrentWorkers]
+	res.CurrentWaiting = stats[nStatsCurrentWaiting]
+	res.TotalConnections = stats[nStatsTotalConnections]
+	res.Pid = stats[nStatsPid]
+	res.Uptime = stats[nStatsUptime]
+	res.BinlogOldestIndex = stats[nStatsBinlogOldestIndex]
+	res.BinlogCurrentIndex = stats[nStatsBinlogCurrentIndex]
+	res.BinlogRecordsMigrated = stats[nStatsBinlogRecordsMigrated]
+	res.BinlogRecordsWritten = stats[nStatsBinlogRecordsWritten]
+	res.BinlogMaxSize = stats[nStatsBinlogMaxSize]
+	return res, nil
 }
 
 // StatsJob retrieves statistics about the given job.
@@ -308,34 +515,32 @@ func (c *Conn) StatsJob(id uint64) (JobStats, error) {
 	if err != nil {
 		return JobStats{}, err
 	}
-	var stats [12]uint64
-	var tube, state string
+	var res JobStats
+	var stats [nJobStats]uint64
 	err = parseStats(body, jobStatToIdx, stats[:], func(name string, value string) {
-		if name == "tube" {
-			tube = value
-		} else if name == "state" {
-			state = value
+		switch name {
+		case "tube":
+			res.Tube = value
+		case "state":
+			res.State = value
 		}
 	})
 	if err != nil {
 		return JobStats{}, err
 	}
-	return JobStats{
-		Id:       stats[idxId],
-		Tube:     tube,
-		State:    state,
-		Pri:      stats[idxPri],
-		Age:      stats[idxAge],
-		Delay:    stats[idxDelay],
-		Ttr:      stats[idxTtr],
-		TimeLeft: stats[idxTimeLeft],
-		File:     stats[idxFile],
-		Reserves: stats[idxReserves],
-		Timeouts: stats[idxTimeouts],
-		Releases: stats[idxReleases],
-		Buries:   stats[idxBuries],
-		Kicks:    stats[idxKicks],
-	}, nil
+	res.Id = stats[nJobStatsId]
+	res.Pri = stats[nJobStatsPri]
+	res.Age = stats[nJobStatsAge]
+	res.Delay = stats[nJobStatsDelay]
+	res.Ttr = stats[nJobStatsTtr]
+	res.TimeLeft = stats[nJobStatsTimeLeft]
+	res.File = stats[nJobStatsFile]
+	res.Reserves = stats[nJobStatsReserves]
+	res.Timeouts = stats[nJobStatsTimeouts]
+	res.Releases = stats[nJobStatsReleases]
+	res.Buries = stats[nJobStatsBuries]
+	res.Kicks = stats[nJobStatsKicks]
+	return res, nil
 }
 
 // ListTubes returns the names of the tubes that currently
