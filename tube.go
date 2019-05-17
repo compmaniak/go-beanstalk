@@ -1,7 +1,6 @@
 package beanstalk
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -76,14 +75,15 @@ func (t *Tube) Put(body []byte, pri uint32, delay, ttr time.Duration) (id uint64
 	if err != nil {
 		return 0, err
 	}
-	_, err = fmt.Sscanf(header, "INSERTED %d", &id)
+	var args [1]uint64
+	err = scan(header, "INSERTED", args[:])
 	if err != nil {
-		err = scan(header, "BURIED %d", &id)
+		err = scan(header, "BURIED", args[:])
 		if err == nil {
 			err = ConnError{t.Conn, r.op, ErrBuried}
 		}
 	}
-	return id, err
+	return args[0], err
 }
 
 // PeekReady gets a copy of the job at the front of t's ready queue.
@@ -92,11 +92,12 @@ func (t *Tube) PeekReady() (id uint64, body []byte, err error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	body, err = t.Conn.readResp(r, true, "FOUND %d", &id)
+	var args [1]uint64
+	body, err = t.Conn.readRespArgs(r, true, "FOUND", args[:])
 	if err != nil {
 		return 0, nil, err
 	}
-	return id, body, nil
+	return args[0], body, nil
 }
 
 // PeekDelayed gets a copy of the delayed job that is next to be
@@ -106,11 +107,12 @@ func (t *Tube) PeekDelayed() (id uint64, body []byte, err error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	body, err = t.Conn.readResp(r, true, "FOUND %d", &id)
+	var args [1]uint64
+	body, err = t.Conn.readRespArgs(r, true, "FOUND", args[:])
 	if err != nil {
 		return 0, nil, err
 	}
-	return id, body, nil
+	return args[0], body, nil
 }
 
 // PeekBuried gets a copy of the job in the holding area that would
@@ -120,11 +122,12 @@ func (t *Tube) PeekBuried() (id uint64, body []byte, err error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	body, err = t.Conn.readResp(r, true, "FOUND %d", &id)
+	var args [1]uint64
+	body, err = t.Conn.readRespArgs(r, true, "FOUND", args[:])
 	if err != nil {
 		return 0, nil, err
 	}
-	return id, body, nil
+	return args[0], body, nil
 }
 
 // Kick takes up to bound jobs from the holding area and moves them into
@@ -135,11 +138,12 @@ func (t *Tube) Kick(bound int) (n int, err error) {
 	if err != nil {
 		return 0, err
 	}
-	_, err = t.Conn.readResp(r, false, "KICKED %d", &n)
+	var args [1]uint64
+	_, err = t.Conn.readRespArgs(r, false, "KICKED", args[:])
 	if err != nil {
 		return 0, err
 	}
-	return n, nil
+	return int(args[0]), nil
 }
 
 // Stats retrieves statistics about tube t.

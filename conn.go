@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/textproto"
 	"strings"
+	"strconv"
 	"time"
 )
 
@@ -352,12 +353,17 @@ func (c *Conn) readRawResp(r req, readBody bool) (header string, body []byte, er
 	return
 }
 
-func (c *Conn) readResp(r req, readBody bool, f string, a ...interface{}) ([]byte, error) {
+func (c *Conn) readResp(r req, readBody bool, cmd string) ([]byte, error) {
+	var args [0]uint64
+	return c.readRespArgs(r, readBody, cmd, args[:])
+}
+
+func (c *Conn) readRespArgs(r req, readBody bool, cmd string, args []uint64) ([]byte, error) {
 	header, body, err := c.readRawResp(r, readBody)
 	if err != nil {
 		return nil, err
 	}
-	err = scan(header, f, a...)
+	err = scan(header, cmd, args)
 	if err != nil {
 		return nil, ConnError{c, r.op, err}
 	}
@@ -428,7 +434,8 @@ func (c *Conn) Peek(id uint64) (body []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.readResp(r, true, "FOUND %d", &id)
+	var args [1]uint64
+	return c.readRespArgs(r, true, "FOUND", args[:])
 }
 
 func (c *Conn) Stats() (Stats, error) {
@@ -554,10 +561,26 @@ func (c *Conn) ListTubes() ([]string, error) {
 	return parseList(body), err
 }
 
-func scan(input, format string, a ...interface{}) error {
-	_, err := fmt.Sscanf(input, format, a...)
-	if err != nil {
+func scan(input, cmd string, args []uint64) (err error) {
+	if !strings.HasPrefix(input, cmd) {
 		return findRespError(input)
+	}
+	s := input[len(cmd):]
+	for i := 0; i < len(args); i++ {
+		if len(s) == 0 || s[0] != ' ' {
+			return unknownRespError(input)
+		}
+		j := 1
+		for ; j < len(s); j++ {
+			if c := s[j]; c < '0' || c > '9' {
+				break
+			}
+		}
+		args[i], err = strconv.ParseUint(s[1:j], 10, 64)
+		if err != nil {
+			return err
+		}
+		s = s[j:]
 	}
 	return nil
 }
