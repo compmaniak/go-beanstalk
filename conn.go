@@ -1,12 +1,12 @@
 package beanstalk
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net"
-	"net/textproto"
-	"strings"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,9 +21,12 @@ const DefaultKeepAlivePeriod = 10 * time.Second
 // connection. The embedded types carry methods with them; see the
 // documentation of those types for details.
 type Conn struct {
-	c       *textproto.Conn
+	c       io.ReadWriteCloser
+	w       *bufio.Writer
+	r       *bufio.Reader
 	used    string
 	watched map[string]bool
+	buf     []byte
 	Tube
 	TubeSet
 }
@@ -230,7 +233,9 @@ var (
 // NewConn returns a new Conn using conn for I/O.
 func NewConn(conn io.ReadWriteCloser) *Conn {
 	c := new(Conn)
-	c.c = textproto.NewConn(conn)
+	c.c = conn
+	c.w = bufio.NewWriter(c.c)
+	c.r = bufio.NewReader(c.c)
 	c.Tube = Tube{c, "default"}
 	c.TubeSet = *NewTubeSet(c, "default")
 	c.used = "default"
@@ -264,9 +269,6 @@ func (c *Conn) Close() error {
 }
 
 func (c *Conn) cmd(t *Tube, ts *TubeSet, body []byte, op string, args ...interface{}) (req, error) {
-	r := req{c.c.Next(), op}
-	c.c.StartRequest(r.id)
-	defer c.c.EndRequest(r.id)
 	err := c.adjustTubes(t, ts)
 	if err != nil {
 		return req{}, err
@@ -276,14 +278,14 @@ func (c *Conn) cmd(t *Tube, ts *TubeSet, body []byte, op string, args ...interfa
 	}
 	c.printLine(string(op), args...)
 	if body != nil {
-		c.c.W.Write(body)
-		c.c.W.Write(crnl)
+		c.w.Write(body)
+		c.w.Write(crnl)
 	}
-	err = c.c.W.Flush()
+	err = c.w.Flush()
 	if err != nil {
 		return req{}, ConnError{c, op, err}
 	}
-	return r, nil
+	return req{op}, nil
 }
 
 func (c *Conn) adjustTubes(t *Tube, ts *TubeSet) error {
@@ -318,20 +320,26 @@ func (c *Conn) adjustTubes(t *Tube, ts *TubeSet) error {
 
 // does not flush
 func (c *Conn) printLine(cmd string, args ...interface{}) {
-	io.WriteString(c.c.W, cmd)
+	io.WriteString(c.w, cmd)
 	for _, a := range args {
-		c.c.W.Write(space)
-		fmt.Fprint(c.c.W, a)
+		c.w.Write(space)
+		fmt.Fprint(c.w, a)
 	}
-	c.c.W.Write(crnl)
+	c.w.Write(crnl)
+}
+
+func (c *Conn) readLine() (s string, err error) {
+	s, err = c.r.ReadString('\n')
+	if err == nil {
+		s = s[:len(s)-2]
+	}
+	return
 }
 
 func (c *Conn) readRawResp(r req, readBody bool) (header string, body []byte, err error) {
-	c.c.StartResponse(r.id)
-	defer c.c.EndResponse(r.id)
-	line, err := c.c.ReadLine()
+	line, err := c.readLine()
 	for strings.HasPrefix(line, "WATCHING ") || strings.HasPrefix(line, "USING ") {
-		line, err = c.c.ReadLine()
+		line, err = c.readLine()
 	}
 	if err != nil {
 		return "", nil, ConnError{c, r.op, err}
@@ -343,12 +351,14 @@ func (c *Conn) readRawResp(r req, readBody bool) (header string, body []byte, er
 		if err != nil {
 			return "", nil, ConnError{c, r.op, err}
 		}
-		body = make([]byte, size+2) // include trailing CR NL
-		_, err = io.ReadFull(c.c.R, body)
+		if c.buf == nil || len(c.buf) < size+2 {
+			c.buf = make([]byte, size+2) // include trailing CR NL
+		}
+		_, err = io.ReadFull(c.r, c.buf[:size+2])
 		if err != nil {
 			return header, nil, ConnError{c, r.op, err}
 		}
-		body = body[:size] // exclude trailing CR NL
+		body = c.buf[:size] // exclude trailing CR NL
 	}
 	return
 }
@@ -586,6 +596,5 @@ func scan(input, cmd string, args []uint64) (err error) {
 }
 
 type req struct {
-	id uint
 	op string
 }
