@@ -66,7 +66,7 @@ var tubeStatToIdx = map[string]int{
 // wait the given amount of time after returning to the client and before
 // putting the job into the ready queue.
 func (t *Tube) Put(body []byte, pri uint32, delay, ttr time.Duration) (id uint64, err error) {
-	r, err := t.Conn.cmd(t, nil, body, "put", pri, dur(delay), dur(ttr))
+	r, err := t.Conn.cmd(t, nil, body, "put", uint64(pri), dur(delay), dur(ttr))
 	if err != nil {
 		return 0, err
 	}
@@ -134,7 +134,7 @@ func (t *Tube) PeekBuried() (id uint64, body []byte, err error) {
 // the ready queue, then returns the number of jobs moved. Jobs will be
 // taken in the order in which they were last buried.
 func (t *Tube) Kick(bound int) (n int, err error) {
-	r, err := t.Conn.cmd(t, nil, nil, "kick", bound)
+	r, err := t.Conn.cmd(t, nil, nil, "kick", uint64(bound))
 	if err != nil {
 		return 0, err
 	}
@@ -148,7 +148,7 @@ func (t *Tube) Kick(bound int) (n int, err error) {
 
 // Stats retrieves statistics about tube t.
 func (t *Tube) Stats() (TubeStats, error) {
-	r, err := t.Conn.cmd(nil, nil, nil, "stats-tube", t.Name)
+	r, err := t.Conn.cmdTube(nil, nil, nil, "stats-tube", t.Name)
 	if err != nil {
 		return TubeStats{}, err
 	}
@@ -181,7 +181,7 @@ func (t *Tube) Stats() (TubeStats, error) {
 
 // Pause pauses new reservations in t for time d.
 func (t *Tube) Pause(d time.Duration) error {
-	r, err := t.Conn.cmd(nil, nil, nil, "pause-tube", t.Name, dur(d))
+	r, err := t.Conn.cmdTube(nil, nil, nil, "pause-tube", t.Name, dur(d))
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,6 @@ package beanstalk
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -27,6 +26,7 @@ type Conn struct {
 	used    string
 	watched map[string]bool
 	buf     []byte
+	fmtBuf  [32]byte
 	Tube
 	TubeSet
 }
@@ -268,24 +268,28 @@ func (c *Conn) Close() error {
 	return c.c.Close()
 }
 
-func (c *Conn) cmd(t *Tube, ts *TubeSet, body []byte, op string, args ...interface{}) (req, error) {
+func (c *Conn) cmdTube(t *Tube, ts *TubeSet, body []byte, op, s string, args ...uint64) (req, error) {
 	err := c.adjustTubes(t, ts)
 	if err != nil {
 		return req{}, err
 	}
+	c.print(op, s, args...)
 	if body != nil {
-		args = append(args, len(body))
-	}
-	c.printLine(string(op), args...)
-	if body != nil {
-		c.w.Write(body)
+		c.w.Write(space)
+		c.w.Write(strconv.AppendUint(c.fmtBuf[:0], uint64(len(body)), 10))
 		c.w.Write(crnl)
+		c.w.Write(body)
 	}
+	c.w.Write(crnl)
 	err = c.w.Flush()
 	if err != nil {
 		return req{}, ConnError{c, op, err}
 	}
 	return req{op}, nil
+}
+
+func (c *Conn) cmd(t *Tube, ts *TubeSet, body []byte, op string, args ...uint64) (req, error) {
+	return c.cmdTube(t, ts, body, op, "", args...)
 }
 
 func (c *Conn) adjustTubes(t *Tube, ts *TubeSet) error {
@@ -318,13 +322,20 @@ func (c *Conn) adjustTubes(t *Tube, ts *TubeSet) error {
 	return nil
 }
 
-// does not flush
-func (c *Conn) printLine(cmd string, args ...interface{}) {
+func (c *Conn) print(cmd, t string, args ...uint64) {
 	io.WriteString(c.w, cmd)
+	if len(t) > 0 {
+		c.w.Write(space)
+		io.WriteString(c.w, t)
+	}
 	for _, a := range args {
 		c.w.Write(space)
-		fmt.Fprint(c.w, a)
+		c.w.Write(strconv.AppendUint(c.fmtBuf[:0], a, 10))
 	}
+}
+
+func (c *Conn) printLine(cmd, t string, args ...uint64) {
+	c.print(cmd, t, args...)
 	c.w.Write(crnl)
 }
 
@@ -395,7 +406,7 @@ func (c *Conn) Delete(id uint64) error {
 // jobs reserved by c, wait delay seconds, then place the job in the
 // ready queue, which makes it available for reservation by any client.
 func (c *Conn) Release(id uint64, pri uint32, delay time.Duration) error {
-	r, err := c.cmd(nil, nil, nil, "release", id, pri, dur(delay))
+	r, err := c.cmd(nil, nil, nil, "release", id, uint64(pri), dur(delay))
 	if err != nil {
 		return err
 	}
@@ -407,7 +418,7 @@ func (c *Conn) Release(id uint64, pri uint32, delay time.Duration) error {
 // sets its priority to pri. The job will not be scheduled again until it
 // has been kicked; see also the documentation of Kick.
 func (c *Conn) Bury(id uint64, pri uint32) error {
-	r, err := c.cmd(nil, nil, nil, "bury", id, pri)
+	r, err := c.cmd(nil, nil, nil, "bury", id, uint64(pri))
 	if err != nil {
 		return err
 	}
