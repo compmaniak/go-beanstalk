@@ -70,15 +70,15 @@ func (t *Tube) Put(body []byte, pri uint32, delay, ttr time.Duration) (id uint64
 	if err != nil {
 		return 0, err
 	}
-	var header string
+	var header []byte
 	header, _, err = t.Conn.readRawResp(r, false)
 	if err != nil {
 		return 0, err
 	}
 	var args [1]uint64
-	err = scan(header, "INSERTED", args[:])
+	err = t.Conn.scan(header, "INSERTED", args[:])
 	if err != nil {
-		err = scan(header, "BURIED", args[:])
+		err = t.Conn.scan(header, "BURIED", args[:])
 		if err == nil {
 			err = ConnError{t.Conn, r.op, ErrBuried}
 		}

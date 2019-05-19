@@ -2,10 +2,10 @@ package beanstalk
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"net"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -26,6 +26,7 @@ type Conn struct {
 	used    string
 	watched map[string]bool
 	buf     []byte
+	lineBuf []byte
 	fmtBuf  [32]byte
 	Tube
 	TubeSet
@@ -167,6 +168,8 @@ var (
 	nl         = []byte{'\n'}
 	colonSpace = []byte{':', ' '}
 	minusSpace = []byte{'-', ' '}
+	watching   = []byte{'W', 'A', 'T', 'C', 'H', 'I', 'N', 'G', ' '}
+	using      = []byte{'U', 'S', 'I', 'N', 'G', ' '}
 
 	statToIdx = map[string]int{
 		"current-jobs-urgent":      nStatsCurrentJobsUrgent,
@@ -236,6 +239,7 @@ func NewConn(conn io.ReadWriteCloser) *Conn {
 	c.c = conn
 	c.w = bufio.NewWriter(c.c)
 	c.r = bufio.NewReader(c.c)
+	c.lineBuf = make([]byte, 128)
 	c.Tube = Tube{c, "default"}
 	c.TubeSet = *NewTubeSet(c, "default")
 	c.used = "default"
@@ -323,10 +327,10 @@ func (c *Conn) adjustTubes(t *Tube, ts *TubeSet) error {
 }
 
 func (c *Conn) print(cmd, t string, args ...uint64) {
-	io.WriteString(c.w, cmd)
+	c.w.WriteString(cmd)
 	if len(t) > 0 {
 		c.w.Write(space)
-		io.WriteString(c.w, t)
+		c.w.WriteString(t)
 	}
 	for _, a := range args {
 		c.w.Write(space)
@@ -339,28 +343,34 @@ func (c *Conn) printLine(cmd, t string, args ...uint64) {
 	c.w.Write(crnl)
 }
 
-func (c *Conn) readLine() (s string, err error) {
-	s, err = c.r.ReadString('\n')
-	if err == nil {
-		s = s[:len(s)-2]
+func (c *Conn) readLine() ([]byte, error) {
+	c.lineBuf = c.lineBuf[:0] // reset last line
+	for {
+		s, err := c.r.ReadSlice('\n')
+		if err == nil {
+			c.lineBuf = append(c.lineBuf, s...)
+			return c.lineBuf[:len(c.lineBuf)-2], nil
+		} else if err != bufio.ErrBufferFull {
+			return nil, err
+		}
+		c.lineBuf = append(c.lineBuf, s...)
 	}
-	return
 }
 
-func (c *Conn) readRawResp(r req, readBody bool) (header string, body []byte, err error) {
+func (c *Conn) readRawResp(r req, readBody bool) (header []byte, body []byte, err error) {
 	line, err := c.readLine()
-	for strings.HasPrefix(line, "WATCHING ") || strings.HasPrefix(line, "USING ") {
+	for bytes.HasPrefix(line, watching) || bytes.HasPrefix(line, using) {
 		line, err = c.readLine()
 	}
 	if err != nil {
-		return "", nil, ConnError{c, r.op, err}
+		return nil, nil, ConnError{c, r.op, err}
 	}
 	header = line
 	if readBody {
 		var size int
 		header, size, err = parseSize(header)
 		if err != nil {
-			return "", nil, ConnError{c, r.op, err}
+			return nil, nil, ConnError{c, r.op, err}
 		}
 		if c.buf == nil || len(c.buf) < size+2 {
 			c.buf = make([]byte, size+2) // include trailing CR NL
@@ -384,7 +394,7 @@ func (c *Conn) readRespArgs(r req, readBody bool, cmd string, args []uint64) ([]
 	if err != nil {
 		return nil, err
 	}
-	err = scan(header, cmd, args)
+	err = c.scan(header, cmd, args)
 	if err != nil {
 		return nil, ConnError{c, r.op, err}
 	}
@@ -582,26 +592,21 @@ func (c *Conn) ListTubes() ([]string, error) {
 	return parseList(body), err
 }
 
-func scan(input, cmd string, args []uint64) (err error) {
-	if !strings.HasPrefix(input, cmd) {
-		return findRespError(input)
+func (c *Conn) scan(input []byte, cmd string, args []uint64) (err error) {
+	pre := append(c.fmtBuf[:0], cmd...)
+	if !bytes.HasPrefix(input, pre) {
+		return findRespError(string(input))
 	}
-	s := input[len(cmd):]
+	s := input[len(pre):]
 	for i := 0; i < len(args); i++ {
 		if len(s) == 0 || s[0] != ' ' {
-			return unknownRespError(input)
+			return unknownRespError(string(input))
 		}
-		j := 1
-		for ; j < len(s); j++ {
-			if c := s[j]; c < '0' || c > '9' {
-				break
-			}
+		n, k := parseUint(s[1:])
+		if k == 0 {
+			return unknownRespError(string(input))
 		}
-		args[i], err = strconv.ParseUint(s[1:j], 10, 64)
-		if err != nil {
-			return err
-		}
-		s = s[j:]
+		args[i], s = n, s[k+1:]
 	}
 	return nil
 }
