@@ -311,16 +311,14 @@ func (c *Conn) adjustTubes(t *Tube, ts *TubeSet) error {
 					return err
 				}
 				c.printLine("watch", s)
+				c.watched[s] = true
 			}
 		}
 		for s := range c.watched {
 			if !ts.Name[s] {
 				c.printLine("ignore", s)
+				delete(c.watched, s)
 			}
-		}
-		c.watched = make(map[string]bool)
-		for s := range ts.Name {
-			c.watched[s] = true
 		}
 	}
 	return nil
