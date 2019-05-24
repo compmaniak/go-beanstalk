@@ -133,8 +133,8 @@ func (t *Tube) PeekBuried() (id uint64, body []byte, err error) {
 // Kick takes up to bound jobs from the holding area and moves them into
 // the ready queue, then returns the number of jobs moved. Jobs will be
 // taken in the order in which they were last buried.
-func (t *Tube) Kick(bound int) (n int, err error) {
-	r, err := t.Conn.cmd(t, nil, nil, "kick", uint64(bound))
+func (t *Tube) Kick(bound uint64) (n uint64, err error) {
+	r, err := t.Conn.cmd(t, nil, nil, "kick", bound)
 	if err != nil {
 		return 0, err
 	}
@@ -143,7 +143,7 @@ func (t *Tube) Kick(bound int) (n int, err error) {
 	if err != nil {
 		return 0, err
 	}
-	return int(args[0]), nil
+	return args[0], nil
 }
 
 // Stats retrieves statistics about tube t.
