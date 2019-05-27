@@ -41,7 +41,7 @@ func parseUint(s []byte) (uint64, int) {
 func parseSize(s []byte) ([]byte, int, error) {
 	i := bytes.LastIndex(s, space)
 	if i == -1 {
-		return nil, 0, findRespError(string(s))
+		return nil, 0, findRespError(s)
 	}
 	b := s[i+1:]
 	n, k := parseUint(b)

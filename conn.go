@@ -593,7 +593,7 @@ func (c *Conn) ListTubes() ([]string, error) {
 func (c *Conn) scan(input []byte, cmd string, args []uint64) (err error) {
 	pre := append(c.fmtBuf[:0], cmd...)
 	if !bytes.HasPrefix(input, pre) {
-		return findRespError(string(input))
+		return findRespError(input)
 	}
 	s := input[len(pre):]
 	for i := 0; i < len(args); i++ {
