@@ -298,7 +298,7 @@ func (c *Conn) cmd(t *Tube, ts *TubeSet, body []byte, op string, args ...uint64)
 
 func (c *Conn) adjustTubes(t *Tube, ts *TubeSet) error {
 	if t != nil && t.Name != c.used {
-		if err := checkName(t.Name); err != nil {
+		if err := CheckName(t.Name); err != nil {
 			return err
 		}
 		c.printLine("use", t.Name)
@@ -307,7 +307,7 @@ func (c *Conn) adjustTubes(t *Tube, ts *TubeSet) error {
 	if ts != nil {
 		for s := range ts.Name {
 			if !c.watched[s] {
-				if err := checkName(s); err != nil {
+				if err := CheckName(s); err != nil {
 					return err
 				}
 				c.printLine("watch", s)
