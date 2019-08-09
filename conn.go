@@ -1,11 +1,11 @@
 package beanstalk
 
 import (
-	"fmt"
+	"bufio"
+	"bytes"
 	"io"
 	"net"
-	"net/textproto"
-	"strings"
+	"strconv"
 	"time"
 )
 
@@ -20,9 +20,14 @@ const DefaultKeepAlivePeriod = 10 * time.Second
 // connection. The embedded types carry methods with them; see the
 // documentation of those types for details.
 type Conn struct {
-	c       *textproto.Conn
+	c       io.ReadWriteCloser
+	w       *bufio.Writer
+	r       *bufio.Reader
 	used    string
 	watched map[string]bool
+	buf     []byte
+	lineBuf []byte
+	fmtBuf  [32]byte
 	Tube
 	TubeSet
 }
@@ -163,6 +168,8 @@ var (
 	nl         = []byte{'\n'}
 	colonSpace = []byte{':', ' '}
 	minusSpace = []byte{'-', ' '}
+	watching   = []byte{'W', 'A', 'T', 'C', 'H', 'I', 'N', 'G', ' '}
+	using      = []byte{'U', 'S', 'I', 'N', 'G', ' '}
 
 	statToIdx = map[string]int{
 		"current-jobs-urgent":      nStatsCurrentJobsUrgent,
@@ -229,7 +236,10 @@ var (
 // NewConn returns a new Conn using conn for I/O.
 func NewConn(conn io.ReadWriteCloser) *Conn {
 	c := new(Conn)
-	c.c = textproto.NewConn(conn)
+	c.c = conn
+	c.w = bufio.NewWriter(c.c)
+	c.r = bufio.NewReader(c.c)
+	c.lineBuf = make([]byte, 128)
 	c.Tube = Tube{c, "default"}
 	c.TubeSet = *NewTubeSet(c, "default")
 	c.used = "default"
@@ -262,32 +272,33 @@ func (c *Conn) Close() error {
 	return c.c.Close()
 }
 
-func (c *Conn) cmd(t *Tube, ts *TubeSet, body []byte, op string, args ...interface{}) (req, error) {
-	r := req{c.c.Next(), op}
-	c.c.StartRequest(r.id)
-	defer c.c.EndRequest(r.id)
+func (c *Conn) cmdTube(t *Tube, ts *TubeSet, body []byte, op, s string, args ...uint64) (req, error) {
 	err := c.adjustTubes(t, ts)
 	if err != nil {
 		return req{}, err
 	}
+	c.print(op, s, args...)
 	if body != nil {
-		args = append(args, len(body))
+		c.w.Write(space)
+		c.w.Write(strconv.AppendUint(c.fmtBuf[:0], uint64(len(body)), 10))
+		c.w.Write(crnl)
+		c.w.Write(body)
 	}
-	c.printLine(string(op), args...)
-	if body != nil {
-		c.c.W.Write(body)
-		c.c.W.Write(crnl)
-	}
-	err = c.c.W.Flush()
+	c.w.Write(crnl)
+	err = c.w.Flush()
 	if err != nil {
 		return req{}, ConnError{c, op, err}
 	}
-	return r, nil
+	return req{op}, nil
+}
+
+func (c *Conn) cmd(t *Tube, ts *TubeSet, body []byte, op string, args ...uint64) (req, error) {
+	return c.cmdTube(t, ts, body, op, "", args...)
 }
 
 func (c *Conn) adjustTubes(t *Tube, ts *TubeSet) error {
 	if t != nil && t.Name != c.used {
-		if err := checkName(t.Name); err != nil {
+		if err := CheckName(t.Name); err != nil {
 			return err
 		}
 		c.printLine("use", t.Name)
@@ -296,68 +307,92 @@ func (c *Conn) adjustTubes(t *Tube, ts *TubeSet) error {
 	if ts != nil {
 		for s := range ts.Name {
 			if !c.watched[s] {
-				if err := checkName(s); err != nil {
+				if err := CheckName(s); err != nil {
 					return err
 				}
 				c.printLine("watch", s)
+				c.watched[s] = true
 			}
 		}
 		for s := range c.watched {
 			if !ts.Name[s] {
 				c.printLine("ignore", s)
+				delete(c.watched, s)
 			}
-		}
-		c.watched = make(map[string]bool)
-		for s := range ts.Name {
-			c.watched[s] = true
 		}
 	}
 	return nil
 }
 
-// does not flush
-func (c *Conn) printLine(cmd string, args ...interface{}) {
-	io.WriteString(c.c.W, cmd)
-	for _, a := range args {
-		c.c.W.Write(space)
-		fmt.Fprint(c.c.W, a)
+func (c *Conn) print(cmd, t string, args ...uint64) {
+	c.w.WriteString(cmd)
+	if len(t) > 0 {
+		c.w.Write(space)
+		c.w.WriteString(t)
 	}
-	c.c.W.Write(crnl)
+	for _, a := range args {
+		c.w.Write(space)
+		c.w.Write(strconv.AppendUint(c.fmtBuf[:0], a, 10))
+	}
 }
 
-func (c *Conn) readRawResp(r req, readBody bool) (header string, body []byte, err error) {
-	c.c.StartResponse(r.id)
-	defer c.c.EndResponse(r.id)
-	line, err := c.c.ReadLine()
-	for strings.HasPrefix(line, "WATCHING ") || strings.HasPrefix(line, "USING ") {
-		line, err = c.c.ReadLine()
+func (c *Conn) printLine(cmd, t string, args ...uint64) {
+	c.print(cmd, t, args...)
+	c.w.Write(crnl)
+}
+
+func (c *Conn) readLine() ([]byte, error) {
+	c.lineBuf = c.lineBuf[:0] // reset last line
+	for {
+		s, err := c.r.ReadSlice('\n')
+		if err == nil {
+			c.lineBuf = append(c.lineBuf, s...)
+			return c.lineBuf[:len(c.lineBuf)-2], nil
+		} else if err != bufio.ErrBufferFull {
+			return nil, err
+		}
+		c.lineBuf = append(c.lineBuf, s...)
+	}
+}
+
+func (c *Conn) readRawResp(r req, readBody bool) (header []byte, body []byte, err error) {
+	line, err := c.readLine()
+	for bytes.HasPrefix(line, watching) || bytes.HasPrefix(line, using) {
+		line, err = c.readLine()
 	}
 	if err != nil {
-		return "", nil, ConnError{c, r.op, err}
+		return nil, nil, ConnError{c, r.op, err}
 	}
 	header = line
 	if readBody {
 		var size int
 		header, size, err = parseSize(header)
 		if err != nil {
-			return "", nil, ConnError{c, r.op, err}
+			return nil, nil, ConnError{c, r.op, err}
 		}
-		body = make([]byte, size+2) // include trailing CR NL
-		_, err = io.ReadFull(c.c.R, body)
+		if c.buf == nil || len(c.buf) < size+2 {
+			c.buf = make([]byte, size+2) // include trailing CR NL
+		}
+		_, err = io.ReadFull(c.r, c.buf[:size+2])
 		if err != nil {
 			return header, nil, ConnError{c, r.op, err}
 		}
-		body = body[:size] // exclude trailing CR NL
+		body = c.buf[:size] // exclude trailing CR NL
 	}
 	return
 }
 
-func (c *Conn) readResp(r req, readBody bool, f string, a ...interface{}) ([]byte, error) {
+func (c *Conn) readResp(r req, readBody bool, cmd string) ([]byte, error) {
+	var args [0]uint64
+	return c.readRespArgs(r, readBody, cmd, args[:])
+}
+
+func (c *Conn) readRespArgs(r req, readBody bool, cmd string, args []uint64) ([]byte, error) {
 	header, body, err := c.readRawResp(r, readBody)
 	if err != nil {
 		return nil, err
 	}
-	err = scan(header, f, a...)
+	err = c.scan(header, cmd, args)
 	if err != nil {
 		return nil, ConnError{c, r.op, err}
 	}
@@ -379,7 +414,7 @@ func (c *Conn) Delete(id uint64) error {
 // jobs reserved by c, wait delay seconds, then place the job in the
 // ready queue, which makes it available for reservation by any client.
 func (c *Conn) Release(id uint64, pri uint32, delay time.Duration) error {
-	r, err := c.cmd(nil, nil, nil, "release", id, pri, dur(delay))
+	r, err := c.cmd(nil, nil, nil, "release", id, uint64(pri), dur(delay))
 	if err != nil {
 		return err
 	}
@@ -391,7 +426,7 @@ func (c *Conn) Release(id uint64, pri uint32, delay time.Duration) error {
 // sets its priority to pri. The job will not be scheduled again until it
 // has been kicked; see also the documentation of Kick.
 func (c *Conn) Bury(id uint64, pri uint32) error {
-	r, err := c.cmd(nil, nil, nil, "bury", id, pri)
+	r, err := c.cmd(nil, nil, nil, "bury", id, uint64(pri))
 	if err != nil {
 		return err
 	}
@@ -428,7 +463,8 @@ func (c *Conn) Peek(id uint64) (body []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.readResp(r, true, "FOUND %d", &id)
+	var args [1]uint64
+	return c.readRespArgs(r, true, "FOUND", args[:])
 }
 
 func (c *Conn) Stats() (Stats, error) {
@@ -554,15 +590,25 @@ func (c *Conn) ListTubes() ([]string, error) {
 	return parseList(body), err
 }
 
-func scan(input, format string, a ...interface{}) error {
-	_, err := fmt.Sscanf(input, format, a...)
-	if err != nil {
+func (c *Conn) scan(input []byte, cmd string, args []uint64) (err error) {
+	pre := append(c.fmtBuf[:0], cmd...)
+	if !bytes.HasPrefix(input, pre) {
 		return findRespError(input)
+	}
+	s := input[len(pre):]
+	for i := 0; i < len(args); i++ {
+		if len(s) == 0 || s[0] != ' ' {
+			return unknownRespError(string(input))
+		}
+		n, k := parseUint(s[1:])
+		if k == 0 {
+			return unknownRespError(string(input))
+		}
+		args[i], s = n, s[k+1:]
 	}
 	return nil
 }
 
 type req struct {
-	id uint
 	op string
 }

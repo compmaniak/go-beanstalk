@@ -1,6 +1,9 @@
 package beanstalk
 
-import "errors"
+import (
+	"bytes"
+	"errors"
+)
 
 // ConnError records an error message from the server and the operation
 // and connection that caused it.
@@ -28,22 +31,20 @@ var (
 	ErrOOM        = errors.New("server is out of memory")
 	ErrTimeout    = errors.New("timeout")
 	ErrUnknown    = errors.New("unknown command")
-)
 
-var respError = map[string]error{
-	"BAD_FORMAT":      ErrBadFormat,
-	"BURIED":          ErrBuried,
-	"DEADLINE_SOON":   ErrDeadline,
-	"DRAINING":        ErrDraining,
-	"EXPECTED_CRLF":   ErrNoCRLF,
-	"INTERNAL_ERROR":  ErrInternal,
-	"JOB_TOO_BIG":     ErrJobTooBig,
-	"NOT_FOUND":       ErrNotFound,
-	"NOT_IGNORED":     ErrNotIgnored,
-	"OUT_OF_MEMORY":   ErrOOM,
-	"TIMED_OUT":       ErrTimeout,
-	"UNKNOWN_COMMAND": ErrUnknown,
-}
+	resBadFormat  = []byte("BAD_FORMAT")
+	resBuried     = []byte("BURIED")
+	resDeadline   = []byte("DEADLINE_SOON")
+	resDraining   = []byte("DRAINING")
+	resInternal   = []byte("INTERNAL_ERROR")
+	resJobTooBig  = []byte("JOB_TOO_BIG")
+	resNoCRLF     = []byte("EXPECTED_CRLF")
+	resNotFound   = []byte("NOT_FOUND")
+	resNotIgnored = []byte("NOT_IGNORED")
+	resOOM        = []byte("OUT_OF_MEMORY")
+	resTimeout    = []byte("TIMED_OUT")
+	resUnknown    = []byte("UNKNOWN_COMMAND")
+)
 
 type unknownRespError string
 
@@ -51,9 +52,41 @@ func (e unknownRespError) Error() string {
 	return "unknown response: " + string(e)
 }
 
-func findRespError(s string) error {
-	if err := respError[s]; err != nil {
-		return err
+func findRespError(s []byte) error {
+	if len(s) > 0 {
+		ok, err := false, error(nil)
+		switch s[0] {
+		case 'B':
+			ok, err = bytes.Equal(s, resBuried), ErrBuried
+			if !ok {
+				ok, err = bytes.Equal(s, resBadFormat), ErrBadFormat
+			}
+		case 'D':
+			ok, err = bytes.Equal(s, resDeadline), ErrDeadline
+			if !ok {
+				ok, err = bytes.Equal(s, resDraining), ErrDraining
+			}
+		case 'E':
+			ok, err = bytes.Equal(s, resNoCRLF), ErrNoCRLF
+		case 'I':
+			ok, err = bytes.Equal(s, resInternal), ErrInternal
+		case 'J':
+			ok, err = bytes.Equal(s, resJobTooBig), ErrJobTooBig
+		case 'N':
+			ok, err = bytes.Equal(s, resNotFound), ErrNotFound
+			if !ok {
+				ok, err = bytes.Equal(s, resNotIgnored), ErrNotIgnored
+			}
+		case 'O':
+			ok, err = bytes.Equal(s, resOOM), ErrOOM
+		case 'T':
+			ok, err = bytes.Equal(s, resTimeout), ErrTimeout
+		case 'U':
+			ok, err = bytes.Equal(s, resUnknown), ErrUnknown
+		}
+		if ok {
+			return err
+		}
 	}
-	return unknownRespError(s)
+	return unknownRespError(string(s))
 }

@@ -2,6 +2,7 @@ package beanstalk
 
 import (
 	"errors"
+	"strings"
 )
 
 // Characters allowed in a name in the beanstalkd protocol.
@@ -25,7 +26,7 @@ var (
 	ErrTooLong = errors.New("name is too long")
 )
 
-func checkName(s string) error {
+func CheckName(s string) error {
 	switch {
 	case len(s) == 0:
 		return NameError{s, ErrEmpty}
@@ -38,14 +39,10 @@ func checkName(s string) error {
 }
 
 func containsOnly(s, chars string) bool {
-outer:
 	for _, c := range s {
-		for _, m := range chars {
-			if c == m {
-				continue outer
-			}
+		if !strings.ContainsRune(chars, c) {
+			return false
 		}
-		return false
 	}
 	return true
 }

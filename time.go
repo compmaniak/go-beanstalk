@@ -1,12 +1,9 @@
 package beanstalk
 
 import (
-	"strconv"
 	"time"
 )
 
-type dur time.Duration
-
-func (d dur) String() string {
-	return strconv.FormatInt(int64(time.Duration(d)/time.Second), 10)
+func dur(d time.Duration) uint64 {
+	return uint64(d.Seconds())
 }

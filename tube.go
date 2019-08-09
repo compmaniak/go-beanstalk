@@ -1,7 +1,6 @@
 package beanstalk
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -67,23 +66,24 @@ var tubeStatToIdx = map[string]int{
 // wait the given amount of time after returning to the client and before
 // putting the job into the ready queue.
 func (t *Tube) Put(body []byte, pri uint32, delay, ttr time.Duration) (id uint64, err error) {
-	r, err := t.Conn.cmd(t, nil, body, "put", pri, dur(delay), dur(ttr))
+	r, err := t.Conn.cmd(t, nil, body, "put", uint64(pri), dur(delay), dur(ttr))
 	if err != nil {
 		return 0, err
 	}
-	var header string
+	var header []byte
 	header, _, err = t.Conn.readRawResp(r, false)
 	if err != nil {
 		return 0, err
 	}
-	_, err = fmt.Sscanf(header, "INSERTED %d", &id)
+	var args [1]uint64
+	err = t.Conn.scan(header, "INSERTED", args[:])
 	if err != nil {
-		err = scan(header, "BURIED %d", &id)
+		err = t.Conn.scan(header, "BURIED", args[:])
 		if err == nil {
 			err = ConnError{t.Conn, r.op, ErrBuried}
 		}
 	}
-	return id, err
+	return args[0], err
 }
 
 // PeekReady gets a copy of the job at the front of t's ready queue.
@@ -92,11 +92,12 @@ func (t *Tube) PeekReady() (id uint64, body []byte, err error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	body, err = t.Conn.readResp(r, true, "FOUND %d", &id)
+	var args [1]uint64
+	body, err = t.Conn.readRespArgs(r, true, "FOUND", args[:])
 	if err != nil {
 		return 0, nil, err
 	}
-	return id, body, nil
+	return args[0], body, nil
 }
 
 // PeekDelayed gets a copy of the delayed job that is next to be
@@ -106,11 +107,12 @@ func (t *Tube) PeekDelayed() (id uint64, body []byte, err error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	body, err = t.Conn.readResp(r, true, "FOUND %d", &id)
+	var args [1]uint64
+	body, err = t.Conn.readRespArgs(r, true, "FOUND", args[:])
 	if err != nil {
 		return 0, nil, err
 	}
-	return id, body, nil
+	return args[0], body, nil
 }
 
 // PeekBuried gets a copy of the job in the holding area that would
@@ -120,31 +122,33 @@ func (t *Tube) PeekBuried() (id uint64, body []byte, err error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	body, err = t.Conn.readResp(r, true, "FOUND %d", &id)
+	var args [1]uint64
+	body, err = t.Conn.readRespArgs(r, true, "FOUND", args[:])
 	if err != nil {
 		return 0, nil, err
 	}
-	return id, body, nil
+	return args[0], body, nil
 }
 
 // Kick takes up to bound jobs from the holding area and moves them into
 // the ready queue, then returns the number of jobs moved. Jobs will be
 // taken in the order in which they were last buried.
-func (t *Tube) Kick(bound int) (n int, err error) {
+func (t *Tube) Kick(bound uint64) (n uint64, err error) {
 	r, err := t.Conn.cmd(t, nil, nil, "kick", bound)
 	if err != nil {
 		return 0, err
 	}
-	_, err = t.Conn.readResp(r, false, "KICKED %d", &n)
+	var args [1]uint64
+	_, err = t.Conn.readRespArgs(r, false, "KICKED", args[:])
 	if err != nil {
 		return 0, err
 	}
-	return n, nil
+	return args[0], nil
 }
 
 // Stats retrieves statistics about tube t.
 func (t *Tube) Stats() (TubeStats, error) {
-	r, err := t.Conn.cmd(nil, nil, nil, "stats-tube", t.Name)
+	r, err := t.Conn.cmdTube(nil, nil, nil, "stats-tube", t.Name)
 	if err != nil {
 		return TubeStats{}, err
 	}
@@ -177,7 +181,7 @@ func (t *Tube) Stats() (TubeStats, error) {
 
 // Pause pauses new reservations in t for time d.
 func (t *Tube) Pause(d time.Duration) error {
-	r, err := t.Conn.cmd(nil, nil, nil, "pause-tube", t.Name, dur(d))
+	r, err := t.Conn.cmdTube(nil, nil, nil, "pause-tube", t.Name, dur(d))
 	if err != nil {
 		return err
 	}

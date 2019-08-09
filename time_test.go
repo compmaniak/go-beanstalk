@@ -1,14 +1,12 @@
 package beanstalk
 
 import (
-	"fmt"
 	"testing"
+	"time"
 )
 
 func TestFormatDuration(t *testing.T) {
-	var d dur = 100e9
-	s := fmt.Sprint(d)
-	if s != "100" {
+	if s := dur(time.Duration(100e9)); s != 100 {
 		t.Fatal("got", s, "expected 100")
 	}
 }

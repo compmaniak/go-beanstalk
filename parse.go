@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const maxSize = uint64(^uint(0) >> 1)
+
 func parseList(dat []byte) []string {
 	if dat == nil {
 		return nil
@@ -21,16 +23,32 @@ func parseList(dat []byte) []string {
 	return lines
 }
 
-func parseSize(s string) (string, int, error) {
-	i := strings.LastIndex(s, " ")
+func parseUint(s []byte) (uint64, int) {
+	v := uint64(0)
+	for k, c := range s {
+		if '0' <= c && c <= '9' {
+			d := uint64(c - '0')
+			if v <= (^uint64(0)-d)/10 {
+				v = v*10 + d
+				continue
+			}
+		}
+		return v, k
+	}
+	return v, len(s)
+}
+
+func parseSize(s []byte) ([]byte, int, error) {
+	i := bytes.LastIndex(s, space)
 	if i == -1 {
-		return "", 0, findRespError(s)
+		return nil, 0, findRespError(s)
 	}
-	n, err := strconv.Atoi(s[i+1:])
-	if err != nil {
-		return "", 0, err
+	b := s[i+1:]
+	n, k := parseUint(b)
+	if k == 0 || k != len(b) || n > maxSize {
+		return nil, 0, unknownRespError(string(s))
 	}
-	return s[:i], n, nil
+	return s[:i], int(n), nil
 }
 
 type nonNumericHandler func(string, string)

@@ -31,9 +31,10 @@ func (t *TubeSet) Reserve(timeout time.Duration) (id uint64, body []byte, err er
 	if err != nil {
 		return 0, nil, err
 	}
-	body, err = t.Conn.readResp(r, true, "RESERVED %d", &id)
+	var args [1]uint64
+	body, err = t.Conn.readRespArgs(r, true, "RESERVED", args[:])
 	if err != nil {
 		return 0, nil, err
 	}
-	return id, body, nil
+	return args[0], body, nil
 }
